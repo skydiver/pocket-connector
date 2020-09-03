@@ -2,14 +2,12 @@
 
 namespace Skydiver\PocketConnector\Console;
 
-use App;
-use DB;
-
-use App\Services\Import as ImportService;
-
-use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Schema;
+use Skydiver\PocketConnector\Services\Import as ImportService;
 
 class Import extends Command
 {
@@ -32,18 +30,8 @@ class Import extends Command
      */
     protected $description = 'Import all your items to mongoDB';
 
-    /**
-     * Create a new command instance.
-     *
-     * @return void
-     */
-    public function __construct()
-    {
-        parent::__construct();
-
-        $this->key = env('POCKET_CONSUMER_KEY');
-        $this->token = env('POCKET_ACCESS_TOKEN');
-    }
+    private $key;
+    private $token;
 
     /**
      * Execute the console command.
@@ -52,6 +40,21 @@ class Import extends Command
      */
     public function handle()
     {
+        $this->key = env('POCKET_CONSUMER_KEY');
+        $this->token = env('POCKET_ACCESS_TOKEN');
+
+        // Stop if no config found
+        if (empty($this->key) || empty($this->token)) {
+            $this->error('Error: missing "Consumer Key" and "Access Token"');
+            die();
+        }
+
+        // Check if "pocket-tags" table exists
+        if (!Schema::hasTable('pocket-items')) {
+            $this->error('Error: missing "pocket-items" table');
+            exit();
+        }
+
         $this->days = $this->option('days');
         $this->full = $this->option('full') ?? false;
         $this->limit = $this->option('limit') ?? ImportService::FULL_LIMIT;
@@ -62,11 +65,11 @@ class Import extends Command
 
         // Wipe database on full sync
         if ($this->full || $this->wipe) {
-            $this->_wipe();
-            $this->_rebuildIndexes();
+            $this->wipe();
+            $this->rebuildIndexes();
         }
 
-        $this->_import();
+        $this->import();
 
         $this->info("Process finished");
     }
@@ -76,7 +79,7 @@ class Import extends Command
      *
      * @return array
      */
-    private function _fetch() : array
+    private function fetch() : array
     {
         // prepare parameters
         $since = $this->full ? null : $this->since;
@@ -99,16 +102,16 @@ class Import extends Command
      *
      * @return void
      */
-    private function _import()
+    private function import()
     {
-        $items = $this->_fetch();
+        $items = $this->fetch();
 
-        $items = $this->_addExtraInfo($items);
+        $items = $this->addExtraInfo($items);
 
         if ($this->full) {
-            $this->_insertAll($items);
+            $this->insertAll($items);
         } else {
-            $this->_insertDiff($items);
+            $this->insertDiff($items);
         }
     }
 
@@ -118,7 +121,7 @@ class Import extends Command
      * @param array $items
      * @return void
      */
-    private function _insertAll(array $items)
+    private function insertAll(array $items)
     {
         $this->info(sprintf('Adding %d items', count($items)));
 
@@ -126,7 +129,7 @@ class Import extends Command
         $itemsBar = $this->output->createProgressBar(count($items));
 
         foreach ($items as $item) {
-            DB::table('items')->insert([$item]);
+            DB::table('pocket-items')->insert([$item]);
             $itemsBar->advance();
         }
 
@@ -140,7 +143,7 @@ class Import extends Command
      * @param array $items
      * @return void
      */
-    private function _insertDiff(array $items)
+    private function insertDiff(array $items)
     {
         $this->info('Checking new items');
 
@@ -152,7 +155,7 @@ class Import extends Command
             ->toArray();
 
         // match existing documents
-        $exists = DB::table('items')
+        $exists = DB::table('pocket-items')
             ->select('item_id')
             ->whereIn('item_id', $ids)
             ->get()
@@ -170,7 +173,7 @@ class Import extends Command
         }
 
         // insert diff
-        $this->_insertAll($new);
+        $this->insertAll($new);
     }
 
     /**
@@ -179,7 +182,7 @@ class Import extends Command
      * @param array $items
      * @return array
      */
-    private function _addExtraInfo(array $items) :array
+    private function addExtraInfo(array $items) :array
     {
         return collect($items)->map(function ($item) {
             $tags = !empty($item['tags']) ? collect($item['tags'])->keys()->toArray() : null;
@@ -199,9 +202,9 @@ class Import extends Command
      *
      * @return void
      */
-    private function _wipe()
+    private function wipe()
     {
-        DB::table('items')->truncate();
+        DB::table('pocket-items')->truncate();
         $this->warn('Wiped collection');
     }
 
@@ -210,7 +213,7 @@ class Import extends Command
      *
      * @return void
      */
-    private function _rebuildIndexes()
+    private function rebuildIndexes()
     {
         Schema::table('items', function ($collection) {
             $collection->unique('item_id', 'item_id');
@@ -219,6 +222,7 @@ class Import extends Command
             $collection->index('given_url', 'given_url');
             $collection->index('resolved_url', 'resolved_url');
         });
+
         $this->warn('Indexes created');
     }
 }
