@@ -8,7 +8,7 @@ class Import
 {
     const FULL_LIMIT = 10000;
 
-    public function fetchItems(string $key, string $token, ?int $count = self::FULL_LIMIT, ?int $since = null) :array
+    public function fetchItems(string $key, string $token, ?int $count = self::FULL_LIMIT, ?int $since = null): array
     {
         $params = [
             'consumer_key' => $key,
@@ -28,5 +28,4 @@ class Import
 
         return $response->json()['list'];
     }
-
 }
