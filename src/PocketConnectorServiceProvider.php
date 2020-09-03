@@ -3,6 +3,8 @@
 namespace Skydiver\PocketConnector;
 
 use Illuminate\Support\ServiceProvider;
+use Skydiver\PocketConnector\Console\Tags;
+use Skydiver\PocketConnector\Console\Import;
 
 class PocketConnectorServiceProvider extends ServiceProvider
 {
@@ -21,7 +23,7 @@ class PocketConnectorServiceProvider extends ServiceProvider
 
         if ($this->app->runningInConsole()) {
             $this->publishes([
-                __DIR__.'/../config/config.php' => config_path('pocket-connector.php'),
+                __DIR__ . '/../config/config.php' => config_path('pocket-connector.php'),
             ], 'config');
 
             // Publishing the views.
@@ -40,7 +42,10 @@ class PocketConnectorServiceProvider extends ServiceProvider
             ], 'lang');*/
 
             // Registering package commands.
-            // $this->commands([]);
+            $this->commands([
+                Import::class,
+                Tags::class,
+            ]);
         }
     }
 
@@ -50,7 +55,7 @@ class PocketConnectorServiceProvider extends ServiceProvider
     public function register()
     {
         // Automatically apply the package configuration
-        $this->mergeConfigFrom(__DIR__.'/../config/config.php', 'pocket-connector');
+        $this->mergeConfigFrom(__DIR__ . '/../config/config.php', 'pocket-connector');
 
         // Register the main class to use with the facade
         $this->app->singleton('pocket-connector', function () {
