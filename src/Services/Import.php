@@ -24,7 +24,9 @@ class Import
             $params['count'] = $count;
         }
 
-        $response = Http::post('https://getpocket.com/v3/get', $params);
+        $response = Http::withHeaders([
+            'User-Agent' => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36',
+        ])->get('https://getpocket.com/v3/get', $params);
 
         return $response->json()['list'];
     }
