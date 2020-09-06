@@ -51,7 +51,7 @@ class Tags extends Command
 
         // Get items from Pocket
         $items = App::make(ImportService::class)
-            ->fetchItems($key, $token, 20);
+            ->fetchItems($key, $token);
 
         // Make a tags collection
         $tags = collect($items)
