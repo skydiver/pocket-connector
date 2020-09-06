@@ -223,7 +223,7 @@ class Import extends Command
      */
     private function rebuildIndexes()
     {
-        Schema::table('items', function ($collection) {
+        Schema::connection($this->connection)->table('items', function ($collection) {
             $collection->unique('item_id', 'item_id');
             $collection->index('given_title', 'given_title');
             $collection->index('resolved_title', 'resolved_title');
