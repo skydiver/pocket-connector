@@ -34,6 +34,9 @@ class Tags extends Command
         $key = env('POCKET_CONSUMER_KEY');
         $token = env('POCKET_ACCESS_TOKEN');
 
+        $connection = config('pocket-connector.database_connection');
+        $table = config('pocket-connector.table_tags');
+
         // Stop if no config found
         if (empty($key) || empty($token)) {
             $this->error('Error: missing "Consumer Key" and "Access Token"');
@@ -41,8 +44,8 @@ class Tags extends Command
         }
 
         // Check if "pocket-tags" table exists
-        if (!Schema::hasTable('pocket-tags')) {
-            $this->error('Error: missing "pocket-tags" table');
+        if (!Schema::connection($connection)->hasTable($table)) {
+            $this->error('Error: missing "' . $this->table . '" table');
             exit();
         }
 
@@ -65,7 +68,7 @@ class Tags extends Command
         $total = $tags->count();
 
         // Wipe existing tags
-        DB::table('pocket-tags')->truncate();
+        DB::connection($connection)->table($table)->truncate();
         $this->warn('Wiped tags');
 
         $this->info(sprintf('Adding %d tags', $total));
@@ -75,7 +78,7 @@ class Tags extends Command
 
         // Start inserting tags
         foreach ($tags as $tag) {
-            DB::table('pocket-tags')->insert([
+            DB::connection($connection)->table($table)->insert([
                 'tag' => $tag
             ]);
             $tagsBar->advance();

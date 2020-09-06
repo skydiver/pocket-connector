@@ -43,6 +43,9 @@ class Import extends Command
         $this->key = env('POCKET_CONSUMER_KEY');
         $this->token = env('POCKET_ACCESS_TOKEN');
 
+        $this->connection = config('pocket-connector.database_connection');
+        $this->table = config('pocket-connector.table_items');
+
         // Stop if no config found
         if (empty($this->key) || empty($this->token)) {
             $this->error('Error: missing "Consumer Key" and "Access Token"');
@@ -50,8 +53,8 @@ class Import extends Command
         }
 
         // Check if "pocket-tags" table exists
-        if (!Schema::hasTable('pocket-items')) {
-            $this->error('Error: missing "pocket-items" table');
+        if (!Schema::connection($this->connection)->hasTable($this->table)) {
+            $this->error('Error: missing "' . $this->table . '" table');
             exit();
         }
 
@@ -79,7 +82,7 @@ class Import extends Command
      *
      * @return array
      */
-    private function fetch() : array
+    private function fetch(): array
     {
         // prepare parameters
         $since = $this->full ? null : $this->since;
@@ -129,7 +132,9 @@ class Import extends Command
         $itemsBar = $this->output->createProgressBar(count($items));
 
         foreach ($items as $item) {
-            DB::table('pocket-items')->insert([$item]);
+            DB::connection($this->connection)
+                ->table($this->table)
+                ->insert([$item]);
             $itemsBar->advance();
         }
 
@@ -155,7 +160,8 @@ class Import extends Command
             ->toArray();
 
         // match existing documents
-        $exists = DB::table('pocket-items')
+        $exists = DB::connection($this->connection)
+            ->table($this->table)
             ->select('item_id')
             ->whereIn('item_id', $ids)
             ->get()
@@ -182,7 +188,7 @@ class Import extends Command
      * @param array $items
      * @return array
      */
-    private function addExtraInfo(array $items) :array
+    private function addExtraInfo(array $items): array
     {
         return collect($items)->map(function ($item) {
             $tags = !empty($item['tags']) ? collect($item['tags'])->keys()->toArray() : null;
@@ -204,7 +210,9 @@ class Import extends Command
      */
     private function wipe()
     {
-        DB::table('pocket-items')->truncate();
+        DB::connection($this->connection)
+            ->table($this->table)
+            ->truncate();
         $this->warn('Wiped collection');
     }
 

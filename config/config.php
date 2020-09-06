@@ -1,8 +1,8 @@
 <?php
 
-/*
- * You can place your custom package configuration in here.
- */
 return [
+    'database_connection' => 'mongodb',
 
+    'table_items' => 'pocket-items',
+    'table_tags'  => 'pocket-tags',
 ];
