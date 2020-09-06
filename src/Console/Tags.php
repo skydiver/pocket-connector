@@ -45,7 +45,7 @@ class Tags extends Command
 
         // Check if "pocket-tags" table exists
         if (!Schema::connection($connection)->hasTable($table)) {
-            $this->error('Error: missing "' . $this->table . '" table');
+            $this->error('Error: missing "' . $table . '" table');
             exit();
         }
 
