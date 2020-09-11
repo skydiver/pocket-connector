@@ -7,20 +7,21 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Schema;
-use Skydiver\PocketConnector\Services\Import as ImportService;
+use Skydiver\PocketConnector\Services\Import;
 
-class Import extends Command
+class Items extends Command
 {
     /**
      * The name and signature of the console command.
      *
      * @var string
      */
-    protected $signature = 'pocket:import
+    protected $signature = 'pocket:items
+                            {--user= : Assign user_id to records}
                             {--days=7 : Import last n days}
+                            {--limit= : How many items to import (from new to old)}
                             {--full : Make a full sync}
                             {--wipe : Wipe collection before insert data}
-                            {--limit= : How many items to import (from new to old)}
                            ';
 
     /**
@@ -58,9 +59,10 @@ class Import extends Command
             exit();
         }
 
+        $this->user_id = $this->option('user');
         $this->days = $this->option('days');
+        $this->limit = $this->option('limit') ?? Import::FULL_LIMIT;
         $this->full = $this->option('full') ?? false;
-        $this->limit = $this->option('limit') ?? ImportService::FULL_LIMIT;
         $this->wipe = $this->option('wipe');
 
         // Diff import
@@ -94,7 +96,7 @@ class Import extends Command
         }
 
         // Get items from Pocket
-        $items = App::make(ImportService::class)
+        $items = App::make(Import::class)
             ->fetchItems($this->key, $this->token, $this->limit, $since);
 
         return $items;
@@ -135,6 +137,7 @@ class Import extends Command
             DB::connection($this->connection)
                 ->table($this->table)
                 ->insert([$item]);
+
             $itemsBar->advance();
         }
 
@@ -199,6 +202,12 @@ class Import extends Command
                 'given_domain' => $given_domain,
                 'resolved_domain' => $resolved_domain,
             ];
+
+            if ($this->user_id) {
+                $user_id = ['user_id' => (int) $this->user_id];
+                return array_merge($user_id, $item);
+            }
+
             return $item;
         })->toArray();
     }

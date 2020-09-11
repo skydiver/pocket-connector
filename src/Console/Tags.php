@@ -15,7 +15,9 @@ class Tags extends Command
      *
      * @var string
      */
-    protected $signature = 'pocket:tags';
+    protected $signature = 'pocket:tags
+                            {--user= : Assign user_id to records}
+                           ';
 
     /**
      * The description of the command.
@@ -76,11 +78,20 @@ class Tags extends Command
         $this->info("\n");
         $tagsBar = $this->output->createProgressBar($total);
 
+        $userId = $this->option('user');
+
         // Start inserting tags
         foreach ($tags as $tag) {
-            DB::connection($connection)->table($table)->insert([
+            $data = [
                 'tag' => $tag
-            ]);
+            ];
+
+            if ($userId) {
+                $data['user_id'] = (int) $userId;
+            }
+
+            DB::connection($connection)->table($table)->insert($data);
+
             $tagsBar->advance();
         }
 

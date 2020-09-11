@@ -4,7 +4,7 @@ namespace Skydiver\PocketConnector;
 
 use Illuminate\Support\ServiceProvider;
 use Skydiver\PocketConnector\Console\Tags;
-use Skydiver\PocketConnector\Console\Import;
+use Skydiver\PocketConnector\Console\Items;
 
 class PocketConnectorServiceProvider extends ServiceProvider
 {
@@ -43,7 +43,7 @@ class PocketConnectorServiceProvider extends ServiceProvider
 
             // Registering package commands.
             $this->commands([
-                Import::class,
+                Items::class,
                 Tags::class,
             ]);
         }
