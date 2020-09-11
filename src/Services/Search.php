@@ -2,17 +2,19 @@
 
 namespace Skydiver\PocketConnector\Services;
 
+use Jenssegers\Mongodb\Eloquent\Builder;
+
 class Search
 {
-    public function search($model, array $searchParams)
+    public function search($model, array $searchParams) :Builder
     {
         // search, tags, domain
         extract($searchParams);
 
-        $items = $model::take(20);
+        $query = $model::query();
 
         if ($search) {
-            $items
+            $query
                 ->where('resolved_title', 'like', "%$search%")
                 ->orWhere('given_title', 'like', "%$search%");
         }
@@ -20,7 +22,7 @@ class Search
         if ($tags) {
             $tagsArray = explode(',', $tags);
 
-            $items->where(function ($query) use ($tagsArray) {
+            $query->where(function ($query) use ($tagsArray) {
                 // $query->whereIn('extra.tags', $tags);        // tag OR tag
                 foreach ($tagsArray as $tag) {
                     $query->where('extra.tags', $tag);
@@ -29,11 +31,11 @@ class Search
         }
 
         if ($domain) {
-            $items
+            $query
                 ->where('extra.resolved_domain', 'like', "%$domain%")
                 ->orWhere('extra.given_domain', 'like', "%$domain%");
         }
 
-        return $items->get();
+        return $query;
     }
 }
