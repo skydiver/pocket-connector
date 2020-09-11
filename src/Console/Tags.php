@@ -87,7 +87,7 @@ class Tags extends Command
             ];
 
             if ($userId) {
-                $data['user_id'] = (int) $userId;
+                $data['user_id'] = $userId;
             }
 
             DB::connection($connection)->table($table)->insert($data);

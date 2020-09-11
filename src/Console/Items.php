@@ -204,7 +204,7 @@ class Items extends Command
             ];
 
             if ($this->user_id) {
-                $user_id = ['user_id' => (int) $this->user_id];
+                $user_id = ['user_id' => $this->user_id];
                 return array_merge($user_id, $item);
             }
 
