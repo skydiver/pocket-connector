@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Schema;
 use Skydiver\PocketConnector\Services\Import as ImportService;
+use Skydiver\PocketConnector\Services\ImportTags;
 
 class Tags extends Command
 {
@@ -33,6 +34,14 @@ class Tags extends Command
      */
     public function handle()
     {
+        $userId = $this->option('user', null);
+
+        // Stop if no userId specified
+        if (empty($userId)) {
+            $this->error('Error: user id is required');
+            die();
+        }
+
         $key = env('POCKET_CONSUMER_KEY');
         $token = env('POCKET_ACCESS_TOKEN');
 
@@ -51,21 +60,13 @@ class Tags extends Command
             exit();
         }
 
-        // Get items from Pocket
-        $items = App::make(ImportService::class)
-            ->fetchItems($key, $token);
+        // Define service classes
+        $importService = App::make(ImportService::class);
+        $tagsService = App::make(ImportTags::class);
 
-        // Make a tags collection
-        $tags = collect($items)
-            ->filter(function ($item) {
-                return !empty($item['tags']);
-            })
-            ->map(function ($item) {
-                return collect($item['tags'])->keys();
-            })
-            ->flatten()
-            ->unique()
-            ->values();
+        // Get data from Pocket
+        $items = $importService->fetchItems($key, $token);
+        $tags = $tagsService->parseTags($items);
 
         $total = $tags->count();
 
@@ -78,22 +79,10 @@ class Tags extends Command
         $this->info("\n");
         $tagsBar = $this->output->createProgressBar($total);
 
-        $userId = $this->option('user');
-
-        // Start inserting tags
-        foreach ($tags as $tag) {
-            $data = [
-                'tag' => $tag
-            ];
-
-            if ($userId) {
-                $data['user_id'] = $userId;
-            }
-
-            DB::connection($connection)->table($table)->insert($data);
-
+        // Start tags creation
+        $tagsService->insertTags($connection, $table, $userId, $tags, function () use ($tagsBar) {
             $tagsBar->advance();
-        }
+        });
 
         $tagsBar->finish();
         $this->info("\n");
