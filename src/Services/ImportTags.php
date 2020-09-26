@@ -4,9 +4,8 @@ namespace Skydiver\PocketConnector\Services;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 
-class ImportTags extends Import
+class ImportTags
 {
     public function parseTags(array $items): Collection
     {

@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Schema;
 use Skydiver\PocketConnector\Services\Import;
+use Skydiver\PocketConnector\Services\ImportTags;
+use Skydiver\PocketConnector\Services\ImportItems;
 
 class Items extends Command
 {
@@ -19,8 +21,8 @@ class Items extends Command
     protected $signature = 'pocket:items
                             {--user= : Assign user_id to records}
                             {--days=7 : Import last n days}
-                            {--limit= : How many items to import (from new to old)}
                             {--full : Make a full sync}
+                            {--limit= : How many items to import (from new to old). Valid on full import only}
                             {--wipe : Wipe collection before insert data}
                            ';
 
@@ -41,11 +43,16 @@ class Items extends Command
      */
     public function handle()
     {
+        $userId = $this->option('user', null);
+
+        // Stop if no userId specified
+        if (empty($userId)) {
+            $this->error('Error: user id is required');
+            die();
+        }
+
         $this->key = env('POCKET_CONSUMER_KEY');
         $this->token = env('POCKET_ACCESS_TOKEN');
-
-        $this->connection = config('pocket-connector.database_connection');
-        $this->table = config('pocket-connector.table_items');
 
         // Stop if no config found
         if (empty($this->key) || empty($this->token)) {
@@ -53,9 +60,19 @@ class Items extends Command
             die();
         }
 
+        $this->connection = config('pocket-connector.database_connection');
+        $this->table_tags = config('pocket-connector.table_tags');
+        $this->table_items = config('pocket-connector.table_items');
+
         // Check if "pocket-tags" table exists
-        if (!Schema::connection($this->connection)->hasTable($this->table)) {
-            $this->error('Error: missing "' . $this->table . '" table');
+        if (!Schema::connection($this->connection)->hasTable($this->table_items)) {
+            $this->error('Error: missing "' . $this->table_items . '" table');
+            exit();
+        }
+
+        // Check if "pocket-tags" table exists
+        if (!Schema::connection($this->connection)->hasTable($this->table_tags)) {
+            $this->error('Error: missing "' . $this->table_tags . '" table');
             exit();
         }
 
@@ -74,17 +91,18 @@ class Items extends Command
             $this->rebuildIndexes();
         }
 
+        // Launch items import process
         $this->import();
 
         $this->info("Process finished");
     }
 
     /**
-     * Fetch Pocket items
+     * Import items from Pocket
      *
-     * @return array
+     * @return void
      */
-    private function fetch(): array
+    private function import()
     {
         // prepare parameters
         $since = $this->full ? null : $this->since;
@@ -95,121 +113,43 @@ class Items extends Command
             $this->info('Fetch Pocket items from last ' . $this->days . ' days.');
         }
 
-        // Get items from Pocket
-        $items = App::make(Import::class)
-            ->fetchItems($this->key, $this->token, $this->limit, $since);
+        // Define service class
+        $itemsService = App::make(ImportItems::class);
+        $tagsService = App::make(ImportTags::class);
 
-        return $items;
-    }
+        // Fetch items from Pocket
+        $items = $itemsService->fetch($this->key, $this->token, $this->limit, $since, $this->user_id);
+        $tags = $tagsService->parseTags($items);
 
-    /**
-     * Import items from Pocket
-     *
-     * @return void
-     */
-    private function import()
-    {
-        $items = $this->fetch();
+        // Tags progress bar
+        $totalTags = $tags->count();
+        $tagsBar = $this->output->createProgressBar($totalTags);
 
-        $items = $this->addExtraInfo($items);
-
-        if ($this->full) {
-            $this->insertAll($items);
-        } else {
-            $this->insertDiff($items);
-        }
-    }
-
-    /**
-     * Mass create items
-     *
-     * @param array $items
-     * @return void
-     */
-    private function insertAll(array $items)
-    {
-        $this->info(sprintf('Adding %d items', count($items)));
-
+        // Create tags
+        $this->info('Insert tags:');
+        $tagsService->insertTags($this->connection, $this->table_tags, $this->user_id, $tags, function () use ($tagsBar) {
+            $tagsBar->advance();
+        });
+        $tagsBar->finish();
         $this->info("\n");
-        $itemsBar = $this->output->createProgressBar(count($items));
 
-        foreach ($items as $item) {
-            DB::connection($this->connection)
-                ->table($this->table)
-                ->insert([$item]);
-
-            $itemsBar->advance();
+        // Check if new items only
+        if (!$this->full) {
+            $items = $itemsService->diff($this->connection, $this->table_items, $items);
         }
+
+        // Create progress bars
+        $totalItems = count($items);
+        $itemsBar = $this->output->createProgressBar($totalItems);
+
+        // Insert items
+        $this->info('Insert items:');
+        $itemsService->insert($this->connection, $this->table_items, $items, function () use ($itemsBar) {
+            $itemsBar->advance();
+        });
 
         $itemsBar->finish();
         $this->info("\n");
-    }
-
-    /**
-     * Insert only new records
-     *
-     * @param array $items
-     * @return void
-     */
-    private function insertDiff(array $items)
-    {
-        $this->info('Checking new items');
-
-        $items = collect($items);
-
-        // get ids to insert
-        $ids = $items
-            ->pluck('item_id')
-            ->toArray();
-
-        // match existing documents
-        $exists = DB::connection($this->connection)
-            ->table($this->table)
-            ->select('item_id')
-            ->whereIn('item_id', $ids)
-            ->get()
-            ->pluck('item_id')
-            ->toArray();
-
-        // filter new items
-        $new = $items->filter(function ($item) use ($exists) {
-            return !in_array($item['item_id'], $exists);
-        })->toArray();
-
-        if (empty($new)) {
-            $this->info('There are no new items');
-            return;
-        }
-
-        // insert diff
-        $this->insertAll($new);
-    }
-
-    /**
-     * Add extra info for easier queries
-     *
-     * @param array $items
-     * @return array
-     */
-    private function addExtraInfo(array $items): array
-    {
-        return collect($items)->map(function ($item) {
-            $tags = !empty($item['tags']) ? collect($item['tags'])->keys()->toArray() : null;
-            $given_domain = !empty($item['given_url']) ? parse_url($item['given_url'])['host'] : null;
-            $resolved_domain = !empty($item['resolved_url']) ? parse_url($item['resolved_url'])['host'] : null;
-            $item['extra'] = [
-                'tags' => $tags,
-                'given_domain' => $given_domain,
-                'resolved_domain' => $resolved_domain,
-            ];
-
-            if ($this->user_id) {
-                $user_id = ['user_id' => $this->user_id];
-                return array_merge($user_id, $item);
-            }
-
-            return $item;
-        })->toArray();
     }
 
     /**
@@ -220,9 +160,16 @@ class Items extends Command
     private function wipe()
     {
         DB::connection($this->connection)
-            ->table($this->table)
+            ->table($this->table_tags)
             ->truncate();
-        $this->warn('Wiped collection');
+
+        $this->warn('Wiped tags');
+
+        DB::connection($this->connection)
+            ->table($this->table_items)
+            ->truncate();
+
+        $this->warn('Wiped items collection');
     }
 
     /**
