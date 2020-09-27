@@ -24,19 +24,35 @@ class ImportTags
     public function insertTags(string $connection, string $table, string $userId, Collection $tags, callable $callback = null)
     {
         foreach ($tags as $tag) {
-            $data = [
-                'tag' => $tag
-            ];
-
-            if ($userId) {
-                $data['user_id'] = $userId;
-            }
-
-            DB::connection($connection)->table($table)->insert($data);
+            DB::connection($connection)
+                ->table($table)
+                ->insert([
+                    'tag'     => $tag,
+                    'user_id' => $userId,
+                ]);
 
             if ($callback) {
                 $callback();
             }
         }
+    }
+
+    public function diff(string $connection, string $table, Collection $tags) :Collection
+    {
+        $tags = collect($tags);
+
+        // match existing documents
+        $exists = DB::connection($connection)
+            ->table($table)
+            ->select('tag')
+            ->whereIn('tag', $tags)
+            ->get()
+            ->pluck('tag')
+            ->toArray();
+
+        // filter new items
+        return $tags->filter(function ($tag) use ($exists) {
+            return !in_array($tag, $exists);
+        });
     }
 }
