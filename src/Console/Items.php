@@ -179,7 +179,7 @@ class Items extends Command
      */
     private function rebuildIndexes()
     {
-        Schema::connection($this->connection)->table('items', function ($collection) {
+        Schema::connection($this->connection)->table($this->table_items, function ($collection) {
             $collection->unique('item_id', 'item_id');
             $collection->index('given_title', 'given_title');
             $collection->index('resolved_title', 'resolved_title');
